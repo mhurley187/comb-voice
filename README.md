@@ -1,54 +1,32 @@
-# Comb Voice - disting NT plug-in
+# Comb Voice v2 (Disting NT plug-in)
 
-A stereo synth voice built around comb filters, in the spirit of the Isobar Serratus (comb x mutation
-matrix, chaos, freeze) and Vhikk X (detuned stereo drone voice). It is a **plug-in**: C++ compiled to an
-ARM `.o` file that you copy to the disting NT's SD card.
+Stereo comb-filter synth voice **and** effect: two comb x mutation engines, chaos, freeze, a swirling in-loop
+modulation section, and a Koszalin-style frequency shifter with regeneration.
 
-## Signal flow
-Exciter (noise, or noise bursts on a gate, plus optional external audio) -> two comb **engines**
-(A and B), each a left and right delay loop, detuned against each other. Inside each loop:
-delay -> comb-specific filtering -> damping -> feedback gain -> **mutation** -> DC block -> soft limit.
-**Morph** crossfades A -> B. Output: width, level, soft clip.
+Files to put in the GitHub repo: comb_voice.cpp, comb_core.h, nt_math.h, Makefile, .github/workflows/build.yml.
 
-## Combs (9 in the Serratus; 6 here)
-| Comb | What it does |
-|---|---|
-| Classic | feedback comb, all harmonics |
-| Hollow | negative feedback: odd harmonics only, clarinet/square-ish |
-| String | Karplus-Strong style 2-point average loop |
-| Metal | allpass chain in the loop: stiff, inharmonic, bell/metal (Dispersion sets the amount) |
-| Thick | two taps +/-6 cents apart: phasey, beating resonance |
-| Cross | left and right loops feed each other: stereo coupling |
+## Using it as an effect (external signals only)
+- **Osc level** (Input/Osc page) = 0 silences the internal noise oscillator.
+- Patch audio to **Audio in** (and **Audio in R** for stereo). **Input level** (0-200%) drives it into the combs.
+- **Dry level** passes the untouched input to the outputs; **Wet level** sets the comb output.
+- Pitch CV (1 V/oct) still tunes the combs.
+- Frequency shifter only: Osc level 0, Dry 100, Wet 0, Shifter = Output.
 
-## Mutations (sit inside the feedback loop; amount = "Mutation amt")
-Clean, Saturate, Fold, Crush (bit depth), Clip (asymmetric), Decimate (sample-rate reduction), Rectify.
+## Frequency shifter (Shifter page)
+- **Shifter**: Off / Input (before the combs) / Loop (inside the feedback loops: each pass shifts again, so repeats
+  spiral up or down) / Output.
+- **Shift mode**: Up, Down, Split (L up, R down), Ring (both sidebands).
+- **Shift range** x1/x10/x100, **Shift** (+/-50 Hz in 0.1 steps x range) and **Shift fine**. Negative values go through zero.
+- **Lin FM in / depth**: through-zero linear FM, 100% = 100 Hz per volt (x range).
+- **Exp FM in / depth**: exponential FM, 100% = 1 octave per volt applied to the shift amount.
+- **Shifter mix**: shifted vs unshifted.
+- **Regen page**: feedback around the shifter (Input/Output positions) with a short delay, routed from the Down, Up
+  or Both sidebands; the Koszalin-style barberpole/flanger-ish spirals.
 
-## Parameters
-- **Tone**: Coarse (semitones), Fine (cents), Spread (L/R detune), Feedback, Damping, Dispersion.
-  Feedback is a *decay time* (about 5 ms to 17 s, the same at every pitch); **98%+ self-oscillates**.
-- **Engines**: Comb A/B, Mutation A/B, Morph A>B, Mutation amt.
-- **Exciter**: Drone (continuous noise) or Pluck (burst on gate rising edge, Pluck decay), Exciter level,
-  Input level (external audio into the loops), **Freeze** (stops input, holds the loop at unity gain).
-- **Mod/Output**: Chaos (slow random drift of pitch, decay and damping, independent per side), Chaos rate,
-  Width, Level.
-- **Routing**: Pitch CV (1 V/oct, 0 V = C4), Gate, Audio in, Left/Right outputs with Add/Replace.
+## Swirl (Swirl/Mod page)
+- **Swirl** (default 50%) adds slow pitch wobble per loop (up to +/-45 cents), swept allpass chains inside the loops and
+  rotation of the feedback between left and right. **Swirl rate** sets speed (0.03 - 3.8 Hz). 0 = old sound.
 
-## Build and install
-1. `git clone https://github.com/expertsleepersltd/distingNT_API` and install `arm-none-eabi-g++`.
-2. `make API=/path/to/distingNT_API/include`  ->  `plugins/comb_voice.o`
-3. Copy the `.o` into the plug-ins folder on the NT's SD card (see the NT manual for the exact path),
-   power-cycle, and add "Comb Voice" from the algorithm list.
-4. Before sharing, change the 4-character GUID in `comb_voice.cpp` to something unique.
-
-## What has and has not been verified
-Verified on a desktop CPU (`make test`): pitch accuracy, stability and boundedness across every comb x mutation
-x extreme setting (including 100% feedback, freeze, max chaos, +/-5 V pitch), drone level consistency, decay
-time vs the Feedback knob, and the plug-in's parameter/bus wiring against a **stand-in** API header.
-
-**Not verified** (no ARM toolchain or real API headers were available when this was written):
-- compiling against the real distingNT API - names such as `kNT_unitCents` or the `_NT_factory` fields may
-  differ slightly in your API version; the compiler will point at them
-- whether bus values are volts (assumed: audio scaled by 5, pitch CV used directly; see `kAudioVolts`)
-- CPU load on the NT (about 1.4% of one desktop core; check the NT's CPU meter) and whether the NT's
-  loader resolves `sinf/expf/atan2f/powf` for plug-ins
-- how it sounds on real material: all tuning above is by measurement, not by ear
+## Notes
+- Existing parameters keep their old numbers; new ones are appended. Input level now defaults to 100%.
+- Tested on a host PC with a stand-in API header only; the ARM build runs in GitHub Actions.

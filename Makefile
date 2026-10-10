@@ -15,6 +15,7 @@ plugins/comb_voice.o: comb_voice.cpp comb_core.h nt_math.h
 test: render test_wrapper test_math
 	./test_math
 	python3 analyze.py
+	python3 tests.py
 	./test_wrapper
 
 render: render.cpp comb_core.h nt_math.h
