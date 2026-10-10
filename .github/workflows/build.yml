@@ -25,7 +25,7 @@ jobs:
         run: find distingNT_API -name "*.h" | head -20
 
       - name: Build
-        run: make API=distingNT_API/include plugins/comb_voice.o
+        run: make ARM_CXX=arm-none-eabi-g++ API=distingNT_API/include plugins/comb_voice.o
 
       - name: Save the plugin
         uses: actions/upload-artifact@v4
