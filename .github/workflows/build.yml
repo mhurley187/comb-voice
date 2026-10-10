@@ -21,11 +21,20 @@ jobs:
           sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
           arm-none-eabi-g++ --version
 
-      - name: Show the API headers (helps debugging if the next step fails)
-        run: find distingNT_API -name "*.h" | head -20
-
       - name: Build
         run: make CXX=arm-none-eabi-g++ ARM_CXX=arm-none-eabi-g++ API=distingNT_API/include plugins/comb_voice.o
+
+      - name: Check for unresolved symbols
+        run: |
+          echo "Undefined symbols the NT must provide:"
+          arm-none-eabi-nm -u plugins/comb_voice.o || true
+          echo "Anything that is not an NT_ API function is a problem:"
+          if arm-none-eabi-nm -u plugins/comb_voice.o | grep -v ' NT_'; then
+            echo "FAIL: the plugin depends on library functions the NT may not provide"
+            exit 1
+          fi
+          echo "OK: only NT API symbols are referenced"
+          arm-none-eabi-size plugins/comb_voice.o
 
       - name: Save the plugin
         uses: actions/upload-artifact@v4
