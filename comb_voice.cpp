@@ -10,6 +10,35 @@
 #include <distingnt/api.h>
 #include "comb_core.h"
 
+// ---------------------------------------------------------------------------------------------
+// The ARM compiler may silently turn struct initialisation or copies into calls to memset/memcpy.
+// A plug-in is loaded by the NT's own loader, so it must not rely on C library symbols being
+// available: provide them here, so those calls resolve inside the plug-in itself.
+// (Compiled on the ARM target only, or when CV_PROVIDE_LIBC is defined for host testing.)
+// ---------------------------------------------------------------------------------------------
+#if defined(__arm__) || defined(CV_PROVIDE_LIBC)
+extern "C" {
+
+__attribute__((used, optimize("no-tree-loop-distribute-patterns")))
+void* memset( void* dst, int c, size_t n )
+{
+	uint8_t* d = (uint8_t*)dst;
+	while ( n-- ) *d++ = (uint8_t)c;
+	return dst;
+}
+
+__attribute__((used, optimize("no-tree-loop-distribute-patterns")))
+void* memcpy( void* dst, const void* src, size_t n )
+{
+	uint8_t* d = (uint8_t*)dst;
+	const uint8_t* s = (const uint8_t*)src;
+	while ( n-- ) *d++ = *s++;
+	return dst;
+}
+
+}
+#endif
+
 #define ARRAY_SIZE(a) ((int)(sizeof(a) / sizeof((a)[0])))
 
 static const float kAudioVolts = 5.0f;      // CHECK: +/-1.0 internal == +/-5 V on the bus

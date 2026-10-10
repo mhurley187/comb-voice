@@ -28,8 +28,8 @@ jobs:
         run: |
           echo "Undefined symbols the NT must provide:"
           arm-none-eabi-nm -u plugins/comb_voice.o || true
-          echo "Anything that is not an NT_ API function is a problem:"
-          if arm-none-eabi-nm -u plugins/comb_voice.o | grep -v ' NT_'; then
+          echo "Anything other than NT_ API functions (and the normal _GLOBAL_OFFSET_TABLE_) is a problem:"
+          if arm-none-eabi-nm -u plugins/comb_voice.o | grep -v ' NT_' | grep -v '_GLOBAL_OFFSET_TABLE_'; then
             echo "FAIL: the plugin depends on library functions the NT may not provide"
             exit 1
           fi
