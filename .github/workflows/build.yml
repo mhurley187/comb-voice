@@ -14,6 +14,20 @@ jobs:
         with:
           repository: expertsleepersltd/distingNT_API
           path: distingNT_API
+          fetch-depth: 0
+
+      - name: Use API version 13 (what firmware 1.15 to 1.16 supports)
+        working-directory: distingNT_API
+        run: |
+          grep -n "kNT_apiVersionCurrent" include/distingnt/api.h
+          if grep -q "kNT_apiVersion14" include/distingnt/api.h; then
+            C=$(git log --format=%H -S'kNT_apiVersion14' -- include/distingnt/api.h | tail -1)
+            echo "Header is newer than v13; using the commit just before $C"
+            git checkout -q "$C^"
+          fi
+          echo "Building against:"
+          git log -1 --format='%h %ad %s' --date=short
+          grep -n "kNT_apiVersionCurrent" include/distingnt/api.h
 
       - name: Install the ARM compiler
         run: |
