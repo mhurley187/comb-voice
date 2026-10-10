@@ -1,26 +1,29 @@
 # --- hardware build (disting NT plug-in) -------------------------------------------------------
-# Point API at the include/ folder of a checkout of https://github.com/expertsleepersltd/distingNT_API
-# If the API repo's own example Makefile uses different flags, prefer those.
+# Same compiler flags as Expert Sleepers' own distingNT_API examples/Makefile: compile to a plain
+# object file with -c (no extra relink step).
+# API = include/ folder of a checkout of https://github.com/expertsleepersltd/distingNT_API
 API      ?= ../distingNT_API/include
-CXX      ?= arm-none-eabi-c++
-CXXFLAGS := -std=c++11 -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb \
-            -fno-rtti -fno-exceptions -Os -fPIC -Wall -I$(API) -I.
+ARM_CXX  ?= arm-none-eabi-c++
+CXXFLAGS := -std=c++11 -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -fno-rtti \
+            -fno-exceptions -Os -fPIC -Wall -I$(API) -I.
 
-plugins/comb_voice.o: comb_voice.cpp comb_core.h
+plugins/comb_voice.o: comb_voice.cpp comb_core.h nt_math.h
 	mkdir -p plugins
-	$(CXX) $(CXXFLAGS) -c -o build_comb_voice.o comb_voice.cpp
-	$(CXX) $(CXXFLAGS) -Wl,--relocatable -nostdlib -o $@ build_comb_voice.o
-	rm -f build_comb_voice.o
+	$(ARM_CXX) $(CXXFLAGS) -c -o $@ comb_voice.cpp
 
 # --- host tests (use a stand-in API header; they do NOT validate against the real one) ------------
-test: render test_wrapper
+test: render test_wrapper test_math
+	./test_math
 	python3 analyze.py
 	./test_wrapper
 
-render: render.cpp comb_core.h
+render: render.cpp comb_core.h nt_math.h
 	g++ -O2 -Wall -Wextra -o $@ $<
 
-test_wrapper: comb_voice.cpp test_wrapper.cpp comb_core.h mock/distingnt/api.h
+test_math: test_math.cpp nt_math.h
+	g++ -O2 -Wall -o $@ $<
+
+test_wrapper: comb_voice.cpp test_wrapper.cpp comb_core.h nt_math.h mock/distingnt/api.h
 	g++ -std=c++11 -O2 -Wno-unused-parameter -Wno-missing-field-initializers -Imock -o $@ comb_voice.cpp test_wrapper.cpp
 
 .PHONY: test

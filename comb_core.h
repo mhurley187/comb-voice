@@ -4,9 +4,9 @@
 // INSIDE the feedback loop. Each engine runs a left and a right delay loop,
 // detuned against each other. A morph control crossfades A -> B.
 #pragma once
-#include <math.h>
 #include <stdint.h>
-#include <string.h>
+#include <stddef.h>
+#include "nt_math.h"
 
 namespace comb {
 
@@ -79,7 +79,7 @@ struct DelayLine
 {
 	float* buf = nullptr;
 	int w = 0;
-	void init(float* b) { buf = b; w = 0; memset(buf, 0, sizeof(float) * kMaxDelay); }
+	void init(float* b) { buf = b; w = 0; for (int i = 0; i < kMaxDelay; ++i) buf[i] = 0.f; }
 	inline void write(float x) { buf[w] = x; w = (w + 1) & kMask; }
 	// d = delay in samples measured from the most recent write (d >= 3). Hermite interpolation.
 	inline float read(float d) const
@@ -124,10 +124,10 @@ struct Engine
 		default:
 		case 0: return s;
 		case 1: return ftanh(s * (1.f + 6.f * amt));                       // saturate
-		case 2: return sinf(s * (1.f + 4.f * amt) * 1.5707963f);          // wavefold
+		case 2: return ntm::sin(s * (1.f + 4.f * amt) * 1.5707963f);          // wavefold
 		case 3: {                                                           // bit crush
-			float levels = exp2f(11.f - 9.f * amt);
-			return floorf(s * levels + 0.5f) / levels;
+			float levels = ntm::exp2(11.f - 9.f * amt);
+			return ntm::floor(s * levels + 0.5f) / levels;
 		}
 		case 4: return clampf(s * (1.f + 4.f * amt) + 0.25f * amt, -1.f, 1.f);   // asymmetric hard clip
 		case 5: {                                                           // sample-rate decimate
@@ -135,7 +135,7 @@ struct Engine
 			if (--L.holdCnt <= 0) { L.hold = s; L.holdCnt = period; }
 			return L.hold;
 		}
-		case 6: return s + amt * fabsf(s) * 1.2f;                          // asymmetric rectify (keeps the fundamental)
+		case 6: return s + amt * ntm::fabs(s) * 1.2f;                          // asymmetric rectify (keeps the fundamental)
 		}
 	}
 
@@ -144,17 +144,17 @@ struct Engine
 	static inline float pdLowpass(float a, float w)
 	{
 		float b = 1.f - a;
-		return atan2f(b * sinf(w), 1.f - b * cosf(w)) / w;
+		return ntm::atan2(b * ntm::sin(w), 1.f - b * ntm::cos(w)) / w;
 	}
 	static inline float pdDcBlock(float w)   // negative = phase lead
 	{
 		const float R = kDcR;
-		float phi = 1.5707963f - 0.5f * w - atan2f(R * sinf(w), 1.f - R * cosf(w));
+		float phi = 1.5707963f - 0.5f * w - ntm::atan2(R * ntm::sin(w), 1.f - R * ntm::cos(w));
 		return -phi / w;
 	}
 	static inline float pdAllpass(float g, float w)
 	{
-		float phi = atan2f(-sinf(w), g + cosf(w)) - atan2f(-g * sinf(w), 1.f + g * cosf(w));
+		float phi = ntm::atan2(-ntm::sin(w), g + ntm::cos(w)) - ntm::atan2(-g * ntm::sin(w), 1.f + g * ntm::cos(w));
 		return -phi / w;
 	}
 
@@ -175,7 +175,7 @@ struct Engine
 			// one-pole damping: cutoff tracks pitch so decay character is consistent across notes
 			float fc = f[c] * (1.f + (1.f - damp) * 40.f);
 			fc = clampf(fc, 20.f, 0.45f * sr);
-			a[c] = 1.f - expf(-6.2831853f * fc / sr);
+			a[c] = 1.f - ntm::exp(-6.2831853f * fc / sr);
 			a[c] = a[c] + (1.f - a[c]) * fr;                   // freeze: bypass damping
 			a[c] = clampf(a[c], 0.05f, 1.f);
 
@@ -279,12 +279,12 @@ struct Voice
 	{
 		if (!primed) { semisSlew = P.semis; primed = true; }
 
-		const float decayCoef = expf(-1.f / (0.001f * clampf(P.excDecayMs, 1.f, 5000.f) * sr));
+		const float decayCoef = ntm::exp(-1.f / (0.001f * clampf(P.excDecayMs, 1.f, 5000.f) * sr));
 		const float fMin = sr / (float)(kMaxDelay - 16);
 		const float fMax = 0.2f * sr;
 		// Feedback is a decay time: 5 ms .. ~17 s (T60), identical at every pitch. >= 98% self-oscillates.
 		const float fbx = clampf(P.feedback, 0.f, 1.f);
-		const float t60 = 0.005f * powf(4000.f, fbx);
+		const float t60 = 0.005f * ntm::exp2(11.965784f * fbx);
 		const bool selfOsc = fbx >= 0.98f;
 		const float frTarget = P.freeze ? 1.f : 0.f;
 
@@ -298,8 +298,8 @@ struct Voice
 			float semi = semisSlew + (pitchV ? pitchV[i] * 12.f : 0.f);
 			float centsL = 100.f * semi - P.spreadCents + wL * P.chaos * 25.f;
 			float centsR = 100.f * semi + P.spreadCents + wR * P.chaos * 25.f;
-			float f[2] = { clampf(kBaseHz * exp2f(centsL / 1200.f), fMin, fMax),
-			               clampf(kBaseHz * exp2f(centsR / 1200.f), fMin, fMax) };
+			float f[2] = { clampf(kBaseHz * ntm::exp2(centsL / 1200.f), fMin, fMax),
+			               clampf(kBaseHz * ntm::exp2(centsR / 1200.f), fMin, fMax) };
 
 			if (gate)
 			{
@@ -309,11 +309,11 @@ struct Voice
 			}
 			env *= decayCoef;
 
-			float t60m = t60 * exp2f(wM * P.chaos * 0.6f);
+			float t60m = t60 * ntm::exp2(wM * P.chaos * 0.6f);
 			float g[2];
 			for (int c = 0; c < 2; ++c)
 			{
-				float gc = selfOsc ? 1.02f : expf(-6.9078f / (f[c] * t60m));
+				float gc = selfOsc ? 1.02f : ntm::exp(-6.9078f / (f[c] * t60m));
 				g[c] = gc + (1.f - gc) * frAmt;
 			}
 			float damp = clampf(P.damping + wM * P.chaos * 0.3f, 0.f, 1.f);
@@ -331,7 +331,7 @@ struct Voice
 					// (Fitted by measurement: damping removes much of the noise energy at long decays,
 					// so the ideal 1/sqrt(1-g^2) correction over-corrects.)
 					float gc = clampf(g[c], 0.f, 0.999f);
-					e[c] = nz * level * (0.5f + 0.6f * sqrtf(1.f - gc * gc));
+					e[c] = nz * level * (0.5f + 0.6f * ntm::sqrt(1.f - gc * gc));
 				}
 			}
 			float x = (ext ? ext[i] : 0.f) * P.extLevel;

@@ -6,7 +6,6 @@
 // ASSUMPTIONS TO VERIFY against your copy of the API headers (all flagged with "CHECK"):
 //   - bus values are volts (so 1 V/oct CV is used directly and audio is scaled by kAudioVolts)
 //   - the parameter-unit names and NT_PARAMETER_* macros used below exist as spelled
-#include <math.h>
 #include <new>
 #include <distingnt/api.h>
 #include "comb_core.h"
@@ -163,14 +162,14 @@ static void step( _NT_algorithm* self, float* busFrames, int numFramesBy4 )
 	P.morph       = 0.01f * v[kParamMorph];
 	P.mutAmount   = 0.01f * v[kParamMutAmount];
 	P.chaos       = 0.01f * v[kParamChaos];
-	P.chaosHz     = 0.05f * powf( 400.f, 0.01f * v[kParamChaosRate] );   // 0.05 .. 20 Hz
+	P.chaosHz     = 0.05f * ntm::exp2( 8.643856f * 0.01f * v[kParamChaosRate] );   // 0.05 .. 20 Hz
 	P.pluckMode   = v[kParamExcMode] != 0;
 	P.excLevel    = 0.01f * v[kParamExcLevel];
 	P.excDecayMs  = (float)v[kParamExcDecay];
 	P.extLevel    = 0.01f * v[kParamInLevel];
 	P.freeze      = v[kParamFreeze] != 0;
 	P.width       = 0.01f * v[kParamWidth];
-	P.gain        = powf( 10.f, (float)v[kParamLevel] / 20.f );
+	P.gain        = ntm::exp2( 3.321928f * (float)v[kParamLevel] / 20.f );
 
 	const float* pitch = busIn( busFrames, v[kParamPitchIn], numFrames );
 	const float* gate  = busIn( busFrames, v[kParamGateIn], numFrames );
