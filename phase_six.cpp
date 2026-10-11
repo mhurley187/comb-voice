@@ -1,5 +1,8 @@
 // phase_six.cpp - "Phase Six": six phase-shiftable, time-stretchable LFOs for the Expert Sleepers disting NT.
 // LFO n is wired to output n (outputs default to buses 13..18). DSP lives in lfo_core.h.
+#include <stddef.h>
+#include <stdint.h>
+#include <math.h>
 #include <new>
 #include <distingnt/api.h>
 #include "lfo_core.h"
@@ -14,7 +17,9 @@ void* memcpy( void* dst, const void* src, size_t n ) { uint8_t* d = (uint8_t*)ds
 }
 #endif
 
+#ifndef ARRAY_SIZE
 #define ARRAY_SIZE(a) ((int)(sizeof(a) / sizeof((a)[0])))
+#endif
 
 enum
 {
