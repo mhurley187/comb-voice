@@ -33,6 +33,7 @@ enum
 
 	// added in v1.1 (appended so existing preset indices stay put)
 	kParamSpreadCV, kParamSkewCV, kParamShapeGate,
+	kParamClock,
 
 	kNumParams
 };
@@ -67,12 +68,13 @@ static const _NT_parameter parameters[] = {
 	NT_PARAMETER_CV_INPUT( "Spread CV", 0, 0 )
 	NT_PARAMETER_CV_INPUT( "Skew CV", 0, 0 )
 	NT_PARAMETER_CV_INPUT( "Shape step gate", 0, 0 )
+	NT_PARAMETER_CV_INPUT( "Clock", 0, 0 )
 };
 static_assert( ARRAY_SIZE(parameters) == kNumParams, "parameter table and enum are out of sync" );
 
 static const uint8_t pageLfo[]   = { kParamRate, kParamRange, kParamRateSpread, kParamPhase, kParamShape, kParamSkew };
 static const uint8_t pageOut[]   = { kParamDepth, kParamPolarity, kParamOffset };
-static const uint8_t pageRoute[] = { kParamRateCV, kParamPhaseCV, kParamReset, kParamSpreadCV, kParamSkewCV, kParamShapeGate, kParamOut1, kParamOut1Mode, kParamOut2, kParamOut2Mode,
+static const uint8_t pageRoute[] = { kParamRateCV, kParamPhaseCV, kParamReset, kParamSpreadCV, kParamSkewCV, kParamShapeGate, kParamClock, kParamOut1, kParamOut1Mode, kParamOut2, kParamOut2Mode,
                                      kParamOut3, kParamOut3Mode, kParamOut4, kParamOut4Mode, kParamOut5, kParamOut5Mode, kParamOut6, kParamOut6Mode };
 static const _NT_parameterPage pages[] = {
 	{ .name = "LFO",     .numParams = ARRAY_SIZE(pageLfo),   .params = pageLfo },
@@ -124,6 +126,7 @@ static void step( _NT_algorithm* self, float* busFrames, int numFramesBy4 )
 	P.depth      = 0.01f * v[kParamDepth];
 	P.polarity   = v[kParamPolarity];
 	P.offsetV    = 0.01f * v[kParamOffset];
+	P.clockIdx   = v[kParamRate] * pl::kNumClockRatios / 1001;      // Rate knob = clock ratio while clocked
 
 	pl::Inputs in;
 	in.rateCV  = busIn( busFrames, v[kParamRateCV], numFrames );
@@ -132,6 +135,7 @@ static void step( _NT_algorithm* self, float* busFrames, int numFramesBy4 )
 	in.spreadCV  = busIn( busFrames, v[kParamSpreadCV], numFrames );
 	in.skewCV    = busIn( busFrames, v[kParamSkewCV], numFrames );
 	in.shapeGate = busIn( busFrames, v[kParamShapeGate], numFrames );
+	in.clock     = busIn( busFrames, v[kParamClock], numFrames );
 
 	// Render into scratch (frames of at most 64), then write/add to the chosen buses.
 	const int kChunk = 64;
@@ -149,6 +153,7 @@ static void step( _NT_algorithm* self, float* busFrames, int numFramesBy4 )
 		if ( ci.spreadCV ) ci.spreadCV += off;
 		if ( ci.skewCV ) ci.skewCV += off;
 		if ( ci.shapeGate ) ci.shapeGate += off;
+		if ( ci.clock ) ci.clock += off;
 		a->bank.process( P, ci, outp, n );
 		for ( int c = 0; c < pl::kChannels; ++c )
 		{

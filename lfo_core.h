@@ -89,7 +89,13 @@ struct Params
 	float offsetV = 0.f;
 	int   polarity = 0;          // 0 bipolar, 1 unipolar +, 2 unipolar -
 	float voltScale = 5.f;       // full-scale volts
+	int   clockIdx = 10;         // clock ratio step (0..20, see kClockNum/kClockDen) used while a clock is present
 };
+
+// clock ratios: output cycles per clock tick = num / den.  index 10 = x1
+static const int kNumClockRatios = 21;
+static const int kClockNum[kNumClockRatios] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,   1,   2, 3, 4, 5, 6, 8, 12, 16, 24, 32 };
+static const int kClockDen[kNumClockRatios] = { 32, 24, 16, 12, 8, 6, 5, 4, 3, 2,   1,   1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
 
 struct Inputs
 {
@@ -98,6 +104,7 @@ struct Inputs
 	const float* reset = nullptr;     // rising edge through 1 V resets all phases
 	const float* spreadCV = nullptr;  // added to Rate spread: 5 V == +100%
 	const float* skewCV = nullptr;    // added to Skew: 5 V == +45% (so -5..+5 V sweeps the whole range)
+	const float* clock = nullptr;     // clock: rising edges through 1 V; while present the Rate knob picks a ratio
 	const float* shapeGate = nullptr; // each rising edge through 1 V steps to the next shape (wraps)
 };
 
@@ -108,6 +115,9 @@ struct Bank
 	int32_t cyc[kChannels];
 	float phaseS = 0.f, skewS = 0.5f, depthS = 1.f, offS = 0.f, spreadS = 0.f;
 	bool primed = false, resetHigh = false, gateHigh = false;
+	bool clkHigh = false;
+	float sinceEdge = 0.f, period = 0.f;   // samples
+	int edges = 0, clkN = 0, lastClockIdx = -1;
 	int shapeOff = 0, lastShapeParam = -1, curShape = 0, prevShape = 0;
 	float xf = 0.f;                  // shape crossfade (1 -> 0 over ~5 ms) after a shape change
 
@@ -115,7 +125,7 @@ struct Bank
 	{
 		sr = sampleRate;
 		for (int i = 0; i < kChannels; ++i) { ph[i] = 0.f; cyc[i] = 0; }
-		primed = false; resetHigh = false; gateHigh = false; shapeOff = 0; lastShapeParam = -1; xf = 0.f;
+		primed = false; resetHigh = false; gateHigh = false; clkHigh = false; sinceEdge = 0.f; period = 0.f; edges = 0; clkN = 0; lastClockIdx = -1; shapeOff = 0; lastShapeParam = -1; xf = 0.f;
 	}
 
 	// out: kChannels pointers, each n samples (volts)
@@ -156,11 +166,49 @@ struct Bank
 			if (in.reset)
 			{
 				bool hi = in.reset[i] > 1.f;
-				if (hi && !resetHigh) for (int c = 0; c < kChannels; ++c) { ph[c] = 0.f; cyc[c] = 0; }
+				if (hi && !resetHigh) { for (int c = 0; c < kChannels; ++c) { ph[c] = 0.f; cyc[c] = 0; } clkN = 0; }
 				resetHigh = hi;
+			}
+			// ---- clock follower: while a steady clock is present the Rate knob selects a multiplication / division
+			bool clocked = false;
+			const int ci = P.clockIdx < 0 ? 0 : (P.clockIdx >= kNumClockRatios ? kNumClockRatios - 1 : P.clockIdx);
+			if (in.clock)
+			{
+				sinceEdge += 1.f;
+				bool hi = in.clock[i] > ( clkHigh ? 0.5f : 1.f );
+				if (hi && !clkHigh && sinceEdge > 0.0005f * sr)           // ignore edges closer than 0.5 ms
+				{
+					if (edges > 0 && sinceEdge < 10.f * sr)
+					{
+						float np = sinceEdge;
+						period = ( period > 0.f && ntm::fabs(np - period) < 0.5f * period ) ? period + ( np - period ) * 0.5f : np;
+					}
+					bool fresh = edges < 2 || sinceEdge > 2.5f * period;
+					edges = ( sinceEdge < 10.f * sr ) ? edges + 1 : 1;
+					sinceEdge = 0.f;
+					const int den = kClockDen[ci], num = kClockNum[ci];
+					clkN = ( clkN + 1 ) % den;
+					if (edges >= 2)
+					{
+						float T = (float)( ( clkN * num ) % den ) / (float)den;
+						float e = T - ph[0]; e -= ntm::floor(e + 0.5f);        // shortest way round, in [-0.5, 0.5)
+						float k = ( fresh || lastClockIdx != ci ) ? 1.f : 0.25f;
+						if (fresh) k = 1.f;
+						for (int c = 0; c < kChannels; ++c)
+						{
+							ph[c] += e * k;
+							if (ph[c] >= 1.f) { ph[c] -= 1.f; cyc[c]++; } else if (ph[c] < 0.f) { ph[c] += 1.f; cyc[c]--; }
+						}
+					}
+					lastClockIdx = ci;
+				}
+				clkHigh = hi;
+				clocked = edges >= 2 && period > 0.f && sinceEdge < 2.5f * period;
+				if (!clocked && sinceEdge > 2.5f * period + 0.5f * sr) edges = 0;
 			}
 			float cv = in.rateCV ? clampf(in.rateCV[i], -10.f, 10.f) : 0.f;
 			float hz = P.rateHz * ntm::exp2(cv);
+			if (clocked) hz = (float)kClockNum[ci] / (float)kClockDen[ci] * sr / period;
 			float pcv = in.phaseCV ? in.phaseCV[i] * 0.2f : 0.f;       // 5 V -> 1.0
 			float spread = clampf(phaseS + pcv, -4.f, 4.f);
 
