@@ -38,4 +38,21 @@ jobs:
       - name: Build
         run: make CXX=arm-none-eabi-g++ ARM_CXX=arm-none-eabi-g++ API=distingNT_API/include plugins/comb_voice.o plugins/phase_six.o
 
-      - name: 
+      - name: Check for unresolved symbols
+        run: |
+          for f in plugins/comb_voice.o plugins/phase_six.o; do
+            echo "== $f: undefined symbols the NT must provide:"
+            arm-none-eabi-nm -u $f || true
+            if arm-none-eabi-nm -u $f | grep -v ' NT_' | grep -v '_GLOBAL_OFFSET_TABLE_'; then
+              echo "FAIL: $f depends on library functions the NT may not provide"
+              exit 1
+            fi
+            arm-none-eabi-size $f
+          done
+          echo "OK: only NT API symbols are referenced"
+
+      - name: Save the plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugins
+          path: plugins/*.o
