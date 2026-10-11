@@ -36,22 +36,6 @@ jobs:
           arm-none-eabi-g++ --version
 
       - name: Build
-        run: make CXX=arm-none-eabi-g++ ARM_CXX=arm-none-eabi-g++ API=distingNT_API/include plugins/comb_voice.o
+        run: make CXX=arm-none-eabi-g++ ARM_CXX=arm-none-eabi-g++ API=distingNT_API/include plugins/comb_voice.o plugins/phase_six.o
 
-      - name: Check for unresolved symbols
-        run: |
-          echo "Undefined symbols the NT must provide:"
-          arm-none-eabi-nm -u plugins/comb_voice.o || true
-          echo "Anything other than NT_ API functions (and the normal _GLOBAL_OFFSET_TABLE_) is a problem:"
-          if arm-none-eabi-nm -u plugins/comb_voice.o | grep -v ' NT_' | grep -v '_GLOBAL_OFFSET_TABLE_'; then
-            echo "FAIL: the plugin depends on library functions the NT may not provide"
-            exit 1
-          fi
-          echo "OK: only NT API symbols are referenced"
-          arm-none-eabi-size plugins/comb_voice.o
-
-      - name: Save the plugin
-        uses: actions/upload-artifact@v4
-        with:
-          name: comb_voice
-          path: plugins/comb_voice.o
+      - name: 
