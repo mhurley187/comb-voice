@@ -96,6 +96,9 @@ struct Inputs
 	const float* rateCV = nullptr;    // 1 V/oct
 	const float* phaseCV = nullptr;   // +5 V == +100% phase
 	const float* reset = nullptr;     // rising edge through 1 V resets all phases
+	const float* spreadCV = nullptr;  // added to Rate spread: 5 V == +100%
+	const float* skewCV = nullptr;    // added to Skew: 5 V == +45% (so -5..+5 V sweeps the whole range)
+	const float* shapeGate = nullptr; // each rising edge through 1 V steps to the next shape (wraps)
 };
 
 struct Bank
@@ -104,13 +107,15 @@ struct Bank
 	float ph[kChannels];
 	int32_t cyc[kChannels];
 	float phaseS = 0.f, skewS = 0.5f, depthS = 1.f, offS = 0.f, spreadS = 0.f;
-	bool primed = false, resetHigh = false;
+	bool primed = false, resetHigh = false, gateHigh = false;
+	int shapeOff = 0, lastShapeParam = -1, curShape = 0, prevShape = 0;
+	float xf = 0.f;                  // shape crossfade (1 -> 0 over ~5 ms) after a shape change
 
 	void init(float sampleRate)
 	{
 		sr = sampleRate;
 		for (int i = 0; i < kChannels; ++i) { ph[i] = 0.f; cyc[i] = 0; }
-		primed = false; resetHigh = false;
+		primed = false; resetHigh = false; gateHigh = false; shapeOff = 0; lastShapeParam = -1; xf = 0.f;
 	}
 
 	// out: kChannels pointers, each n samples (volts)
@@ -119,13 +124,34 @@ struct Bank
 		if (!primed) { phaseS = P.phase; skewS = P.skew; depthS = P.depth; offS = P.offsetV; spreadS = P.rateSpread; primed = true; }
 		const float sm = 1.f - ntm::exp(-1.f / (0.01f * sr));
 		const float invSr = 1.f / sr;
+		const float xfStep = 1.f / (0.005f * sr);
+		if (P.shape != lastShapeParam)                      // moving the Shape parameter makes it the new starting point
+		{
+			if (lastShapeParam >= 0) { prevShape = curShape; xf = 1.f; }
+			lastShapeParam = P.shape; shapeOff = 0;
+			curShape = ((P.shape % kNumShapes) + kNumShapes) % kNumShapes;
+			if (!primed || xf == 0.f) prevShape = curShape;
+		}
 		for (int i = 0; i < n; ++i)
 		{
+			if (in.shapeGate)
+			{
+				bool hi = in.shapeGate[i] > ( gateHigh ? 0.5f : 1.f );
+				if (hi && !gateHigh)
+				{
+					shapeOff = ( shapeOff + 1 ) % kNumShapes;
+					prevShape = curShape; xf = 1.f;
+					curShape = ( P.shape + shapeOff ) % kNumShapes;
+				}
+				gateHigh = hi;
+			}
+			const float sCV = in.spreadCV ? in.spreadCV[i] * 0.2f : 0.f;
+			const float kCV = in.skewCV ? in.skewCV[i] * 0.09f : 0.f;
 			phaseS  += ( P.phase - phaseS ) * sm;
-			skewS   += ( clampf(P.skew, 0.02f, 0.98f) - skewS ) * sm;
+			skewS   += ( clampf(P.skew + kCV, 0.02f, 0.98f) - skewS ) * sm;
 			depthS  += ( P.depth - depthS ) * sm;
 			offS    += ( P.offsetV - offS ) * sm;
-			spreadS += ( P.rateSpread - spreadS ) * sm;
+			spreadS += ( clampf(P.rateSpread + sCV, -1.5f, 1.5f) - spreadS ) * sm;
 
 			if (in.reset)
 			{
@@ -148,13 +174,16 @@ struct Bank
 				float fl = ntm::floor(x);
 				int32_t cy = cyc[c] + (int32_t)fl;
 				x -= fl;
-				float s = shape(P.shape, warp(x, skewS), cy);
+				const float wx = warp(x, skewS);
+				float s = shape(curShape, wx, cy);
+				if (xf > 0.f) s = shape(prevShape, wx, cy) * xf + s * ( 1.f - xf );
 				float v;
 				if (P.polarity == 0)      v = s * P.voltScale * depthS;
 				else if (P.polarity == 1) v = ( s + 1.f ) * 0.5f * 2.f * P.voltScale * depthS;
 				else                      v = -( s + 1.f ) * 0.5f * 2.f * P.voltScale * depthS;
 				out[c][i] = clampf(v + offS, -10.f, 10.f);
 			}
+			if (xf > 0.f) { xf -= xfStep; if (xf < 0.f) xf = 0.f; }
 		}
 	}
 };

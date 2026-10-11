@@ -31,6 +31,9 @@ enum
 	kParamShape, kParamSkew,
 	kParamDepth, kParamPolarity, kParamOffset,
 
+	// added in v1.1 (appended so existing preset indices stay put)
+	kParamSpreadCV, kParamSkewCV, kParamShapeGate,
+
 	kNumParams
 };
 
@@ -60,12 +63,16 @@ static const _NT_parameter parameters[] = {
 	{ .name = "Depth",       .min = 0,    .max = 100,  .def = 100, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL },
 	{ .name = "Polarity",    .min = 0,    .max = 2,    .def = 0,   .unit = kNT_unitEnum,    .scaling = 0, .enumStrings = enumPolarity },
 	{ .name = "Offset",      .min = -500, .max = 500,  .def = 0,   .unit = kNT_unitVolts,   .scaling = kNT_scaling100, .enumStrings = NULL },
+
+	NT_PARAMETER_CV_INPUT( "Spread CV", 0, 0 )
+	NT_PARAMETER_CV_INPUT( "Skew CV", 0, 0 )
+	NT_PARAMETER_CV_INPUT( "Shape step gate", 0, 0 )
 };
 static_assert( ARRAY_SIZE(parameters) == kNumParams, "parameter table and enum are out of sync" );
 
 static const uint8_t pageLfo[]   = { kParamRate, kParamRange, kParamRateSpread, kParamPhase, kParamShape, kParamSkew };
 static const uint8_t pageOut[]   = { kParamDepth, kParamPolarity, kParamOffset };
-static const uint8_t pageRoute[] = { kParamRateCV, kParamPhaseCV, kParamReset, kParamOut1, kParamOut1Mode, kParamOut2, kParamOut2Mode,
+static const uint8_t pageRoute[] = { kParamRateCV, kParamPhaseCV, kParamReset, kParamSpreadCV, kParamSkewCV, kParamShapeGate, kParamOut1, kParamOut1Mode, kParamOut2, kParamOut2Mode,
                                      kParamOut3, kParamOut3Mode, kParamOut4, kParamOut4Mode, kParamOut5, kParamOut5Mode, kParamOut6, kParamOut6Mode };
 static const _NT_parameterPage pages[] = {
 	{ .name = "LFO",     .numParams = ARRAY_SIZE(pageLfo),   .params = pageLfo },
@@ -122,6 +129,9 @@ static void step( _NT_algorithm* self, float* busFrames, int numFramesBy4 )
 	in.rateCV  = busIn( busFrames, v[kParamRateCV], numFrames );
 	in.phaseCV = busIn( busFrames, v[kParamPhaseCV], numFrames );
 	in.reset   = busIn( busFrames, v[kParamReset], numFrames );
+	in.spreadCV  = busIn( busFrames, v[kParamSpreadCV], numFrames );
+	in.skewCV    = busIn( busFrames, v[kParamSkewCV], numFrames );
+	in.shapeGate = busIn( busFrames, v[kParamShapeGate], numFrames );
 
 	// Render into scratch (frames of at most 64), then write/add to the chosen buses.
 	const int kChunk = 64;
@@ -136,6 +146,9 @@ static void step( _NT_algorithm* self, float* busFrames, int numFramesBy4 )
 		if ( ci.rateCV ) ci.rateCV += off;
 		if ( ci.phaseCV ) ci.phaseCV += off;
 		if ( ci.reset ) ci.reset += off;
+		if ( ci.spreadCV ) ci.spreadCV += off;
+		if ( ci.skewCV ) ci.skewCV += off;
+		if ( ci.shapeGate ) ci.shapeGate += off;
 		a->bank.process( P, ci, outp, n );
 		for ( int c = 0; c < pl::kChannels; ++c )
 		{
