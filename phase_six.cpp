@@ -23,17 +23,15 @@ void* memcpy( void* dst, const void* src, size_t n ) { uint8_t* d = (uint8_t*)ds
 
 enum
 {
-	kParamRateCV, kParamPhaseCV, kParamReset,
-	kParamOut1, kParamOut1Mode, kParamOut2, kParamOut2Mode, kParamOut3, kParamOut3Mode,
-	kParamOut4, kParamOut4Mode, kParamOut5, kParamOut5Mode, kParamOut6, kParamOut6Mode,
+	kParamRateCV, kParamPhaseCV, kParamReset, kParamSpreadCV, kParamSkewCV, kParamShapeGate, kParamClock,
+	kParamOut1, kParamLevel1, kParamOut2, kParamLevel2, kParamOut3, kParamLevel3,
+	kParamOut4, kParamLevel4, kParamOut5, kParamLevel5, kParamOut6, kParamLevel6,
 
 	kParamRate, kParamRange, kParamRateSpread, kParamPhase,
 	kParamShape, kParamSkew,
-	kParamDepth, kParamPolarity, kParamOffset,
+	kParamDepth, kParamOffset,
 
-	// added in v1.1 (appended so existing preset indices stay put)
-	kParamSpreadCV, kParamSkewCV, kParamShapeGate,
-	kParamClock,
+	kParamPol1, kParamPol2, kParamPol3, kParamPol4, kParamPol5, kParamPol6,
 
 	kNumParams
 };
@@ -44,16 +42,26 @@ static const char* const enumShapes[] = {
 static const char* const enumRange[] = { "Slow", "Medium", "Fast" };
 static const char* const enumPolarity[] = { "Bipolar", "Unipolar +", "Unipolar -" };
 
+#define LFO_OUT( n, bus ) \
+	NT_PARAMETER_CV_OUTPUT( "LFO " #n " output", 1, bus ) \
+	{ .name = "LFO " #n " level", .min = 0, .max = 100, .def = 100, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL },
+#define LFO_POL( n ) \
+	{ .name = "LFO " #n " polarity", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumPolarity },
+
 static const _NT_parameter parameters[] = {
 	NT_PARAMETER_CV_INPUT( "Rate CV", 0, 0 )
 	NT_PARAMETER_CV_INPUT( "Phase CV", 0, 0 )
 	NT_PARAMETER_CV_INPUT( "Reset", 0, 0 )
-	NT_PARAMETER_CV_OUTPUT_WITH_MODE( "LFO 1 output", 1, 13 )
-	NT_PARAMETER_CV_OUTPUT_WITH_MODE( "LFO 2 output", 1, 14 )
-	NT_PARAMETER_CV_OUTPUT_WITH_MODE( "LFO 3 output", 1, 15 )
-	NT_PARAMETER_CV_OUTPUT_WITH_MODE( "LFO 4 output", 1, 16 )
-	NT_PARAMETER_CV_OUTPUT_WITH_MODE( "LFO 5 output", 1, 17 )
-	NT_PARAMETER_CV_OUTPUT_WITH_MODE( "LFO 6 output", 1, 18 )
+	NT_PARAMETER_CV_INPUT( "Spread CV", 0, 0 )
+	NT_PARAMETER_CV_INPUT( "Skew CV", 0, 0 )
+	NT_PARAMETER_CV_INPUT( "Shape step gate", 0, 0 )
+	NT_PARAMETER_CV_INPUT( "Clock", 0, 0 )
+	LFO_OUT( 1, 13 )
+	LFO_OUT( 2, 14 )
+	LFO_OUT( 3, 15 )
+	LFO_OUT( 4, 16 )
+	LFO_OUT( 5, 17 )
+	LFO_OUT( 6, 18 )
 
 	{ .name = "Rate",        .min = 0,    .max = 1000, .def = 500, .unit = kNT_unitPercent, .scaling = kNT_scaling10, .enumStrings = NULL },
 	{ .name = "Range",       .min = 0,    .max = 2,    .def = 1,   .unit = kNT_unitEnum,    .scaling = 0, .enumStrings = enumRange },
@@ -62,20 +70,22 @@ static const _NT_parameter parameters[] = {
 	{ .name = "Shape",       .min = 0,    .max = pl::kNumShapes - 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumShapes },
 	{ .name = "Skew",        .min = 5,    .max = 95,   .def = 50,  .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL },
 	{ .name = "Depth",       .min = 0,    .max = 100,  .def = 100, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL },
-	{ .name = "Polarity",    .min = 0,    .max = 2,    .def = 0,   .unit = kNT_unitEnum,    .scaling = 0, .enumStrings = enumPolarity },
 	{ .name = "Offset",      .min = -500, .max = 500,  .def = 0,   .unit = kNT_unitVolts,   .scaling = kNT_scaling100, .enumStrings = NULL },
 
-	NT_PARAMETER_CV_INPUT( "Spread CV", 0, 0 )
-	NT_PARAMETER_CV_INPUT( "Skew CV", 0, 0 )
-	NT_PARAMETER_CV_INPUT( "Shape step gate", 0, 0 )
-	NT_PARAMETER_CV_INPUT( "Clock", 0, 0 )
+	LFO_POL( 1 )
+	LFO_POL( 2 )
+	LFO_POL( 3 )
+	LFO_POL( 4 )
+	LFO_POL( 5 )
+	LFO_POL( 6 )
 };
 static_assert( ARRAY_SIZE(parameters) == kNumParams, "parameter table and enum are out of sync" );
 
 static const uint8_t pageLfo[]   = { kParamRate, kParamRange, kParamRateSpread, kParamPhase, kParamShape, kParamSkew };
-static const uint8_t pageOut[]   = { kParamDepth, kParamPolarity, kParamOffset };
-static const uint8_t pageRoute[] = { kParamRateCV, kParamPhaseCV, kParamReset, kParamSpreadCV, kParamSkewCV, kParamShapeGate, kParamClock, kParamOut1, kParamOut1Mode, kParamOut2, kParamOut2Mode,
-                                     kParamOut3, kParamOut3Mode, kParamOut4, kParamOut4Mode, kParamOut5, kParamOut5Mode, kParamOut6, kParamOut6Mode };
+static const uint8_t pageOut[]   = { kParamDepth, kParamOffset };
+static const uint8_t pageRoute[] = { kParamRateCV, kParamPhaseCV, kParamReset, kParamSpreadCV, kParamSkewCV, kParamShapeGate, kParamClock,
+                                     kParamOut1, kParamLevel1, kParamPol1, kParamOut2, kParamLevel2, kParamPol2, kParamOut3, kParamLevel3, kParamPol3,
+                                     kParamOut4, kParamLevel4, kParamPol4, kParamOut5, kParamLevel5, kParamPol5, kParamOut6, kParamLevel6, kParamPol6 };
 static const _NT_parameterPage pages[] = {
 	{ .name = "LFO",     .numParams = ARRAY_SIZE(pageLfo),   .params = pageLfo },
 	{ .name = "Output",  .numParams = ARRAY_SIZE(pageOut),   .params = pageOut },
@@ -124,7 +134,9 @@ static void step( _NT_algorithm* self, float* busFrames, int numFramesBy4 )
 	P.shape      = v[kParamShape];
 	P.skew       = 0.01f * v[kParamSkew];
 	P.depth      = 0.01f * v[kParamDepth];
-	P.polarity   = v[kParamPolarity];
+	static const int levelParam[pl::kChannels] = { kParamLevel1, kParamLevel2, kParamLevel3, kParamLevel4, kParamLevel5, kParamLevel6 };
+	static const int polParam[pl::kChannels]   = { kParamPol1, kParamPol2, kParamPol3, kParamPol4, kParamPol5, kParamPol6 };
+	for ( int c = 0; c < pl::kChannels; ++c ) { P.level[c] = 0.01f * v[levelParam[c]]; P.polarity[c] = v[polParam[c]]; }
 	P.offsetV    = 0.01f * v[kParamOffset];
 	P.clockIdx   = v[kParamRate] * pl::kNumClockRatios / 1001;      // Rate knob = clock ratio while clocked
 
@@ -160,8 +172,7 @@ static void step( _NT_algorithm* self, float* busFrames, int numFramesBy4 )
 			int bus = v[kOutParam[c]];
 			if ( bus <= 0 ) continue;
 			float* dst = busFrames + ( bus - 1 ) * numFrames + off;
-			if ( v[kOutParam[c] + 1] ) for ( int i = 0; i < n; ++i ) dst[i] = tmp[c][i];
-			else                       for ( int i = 0; i < n; ++i ) dst[i] += tmp[c][i];
+			for ( int i = 0; i < n; ++i ) dst[i] = tmp[c][i];
 		}
 	}
 }

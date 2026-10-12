@@ -87,7 +87,8 @@ struct Params
 	float skew = 0.5f;           // 0.05..0.95
 	float depth = 1.f;           // 0..1
 	float offsetV = 0.f;
-	int   polarity = 0;          // 0 bipolar, 1 unipolar +, 2 unipolar -
+	int   polarity[kChannels] = { 0, 0, 0, 0, 0, 0 };   // per LFO: 0 bipolar, 1 unipolar +, 2 unipolar -
+	float level[kChannels] = { 1.f, 1.f, 1.f, 1.f, 1.f, 1.f };   // per LFO output attenuation 0..1
 	float voltScale = 5.f;       // full-scale volts
 	int   clockIdx = 10;         // clock ratio step (0..20, see kClockNum/kClockDen) used while a clock is present
 };
@@ -113,6 +114,7 @@ struct Bank
 	float sr = 48000.f;
 	float ph[kChannels];
 	int32_t cyc[kChannels];
+	float levelS[kChannels] = { 1.f, 1.f, 1.f, 1.f, 1.f, 1.f };
 	float phaseS = 0.f, skewS = 0.5f, depthS = 1.f, offS = 0.f, spreadS = 0.f;
 	bool primed = false, resetHigh = false, gateHigh = false;
 	bool clkHigh = false;
@@ -131,7 +133,7 @@ struct Bank
 	// out: kChannels pointers, each n samples (volts)
 	void process(const Params& P, const Inputs& in, float* const* out, int n)
 	{
-		if (!primed) { phaseS = P.phase; skewS = P.skew; depthS = P.depth; offS = P.offsetV; spreadS = P.rateSpread; primed = true; }
+		if (!primed) { phaseS = P.phase; skewS = P.skew; depthS = P.depth; offS = P.offsetV; for (int c = 0; c < kChannels; ++c) levelS[c] = P.level[c]; spreadS = P.rateSpread; primed = true; }
 		const float sm = 1.f - ntm::exp(-1.f / (0.01f * sr));
 		const float invSr = 1.f / sr;
 		const float xfStep = 1.f / (0.005f * sr);
@@ -226,10 +228,11 @@ struct Bank
 				float s = shape(curShape, wx, cy);
 				if (xf > 0.f) s = shape(prevShape, wx, cy) * xf + s * ( 1.f - xf );
 				float v;
-				if (P.polarity == 0)      v = s * P.voltScale * depthS;
-				else if (P.polarity == 1) v = ( s + 1.f ) * 0.5f * 2.f * P.voltScale * depthS;
-				else                      v = -( s + 1.f ) * 0.5f * 2.f * P.voltScale * depthS;
-				out[c][i] = clampf(v + offS, -10.f, 10.f);
+				if (P.polarity[c] == 0)      v = s * P.voltScale * depthS;
+				else if (P.polarity[c] == 1) v = ( s + 1.f ) * P.voltScale * depthS;
+				else                         v = -( s + 1.f ) * P.voltScale * depthS;
+				levelS[c] += ( P.level[c] - levelS[c] ) * sm;
+				out[c][i] = clampf(( v + offS ) * levelS[c], -10.f, 10.f);
 			}
 			if (xf > 0.f) { xf -= xfStep; if (xf < 0.f) xf = 0.f; }
 		}
