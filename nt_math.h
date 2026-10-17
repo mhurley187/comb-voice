@@ -70,4 +70,17 @@ inline float sqrt(float x)
 	return y;
 }
 
+// log2 for x > 0: split exponent/mantissa, atanh series on the mantissa in [1,2)
+inline float log2(float x)
+{
+	if (x <= 0.f) return -126.f;
+	union { float f; uint32_t u; } s;
+	s.f = x;
+	int e = (int)((s.u >> 23) & 0xff) - 127;
+	s.u = (s.u & 0x007fffffu) | 0x3f800000u;
+	float m = s.f;                                   // [1, 2)
+	float z = (m - 1.f) / (m + 1.f), z2 = z * z;
+	return (float)e + 2.8853901f * z * (1.f + z2 * (0.33333333f + z2 * (0.2f + z2 * (0.14285714f + z2 * 0.11111111f))));
+}
+
 } // namespace ntm

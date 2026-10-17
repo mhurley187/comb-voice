@@ -14,6 +14,20 @@ jobs:
         with:
           repository: expertsleepersltd/distingNT_API
           path: distingNT_API
+          fetch-depth: 0
+
+      - name: Use API version 13 (what firmware 1.15 to 1.16 supports)
+        working-directory: distingNT_API
+        run: |
+          grep -n "kNT_apiVersionCurrent" include/distingnt/api.h
+          if grep -q "kNT_apiVersion14" include/distingnt/api.h; then
+            C=$(git log --format=%H -S'kNT_apiVersion14' -- include/distingnt/api.h | tail -1)
+            echo "Header is newer than v13; using the commit just before $C"
+            git checkout -q "$C^"
+          fi
+          echo "Building against:"
+          git log -1 --format='%h %ad %s' --date=short
+          grep -n "kNT_apiVersionCurrent" include/distingnt/api.h
 
       - name: Install the ARM compiler
         run: |
@@ -22,22 +36,23 @@ jobs:
           arm-none-eabi-g++ --version
 
       - name: Build
-        run: make CXX=arm-none-eabi-g++ ARM_CXX=arm-none-eabi-g++ API=distingNT_API/include plugins/comb_voice.o
+        run: make CXX=arm-none-eabi-g++ ARM_CXX=arm-none-eabi-g++ API=distingNT_API/include plugins/comb_voice.o plugins/phase_six.o plugins/spectral_delay.o
 
       - name: Check for unresolved symbols
         run: |
-          echo "Undefined symbols the NT must provide:"
-          arm-none-eabi-nm -u plugins/comb_voice.o || true
-          echo "Anything other than NT_ API functions (and the normal _GLOBAL_OFFSET_TABLE_) is a problem:"
-          if arm-none-eabi-nm -u plugins/comb_voice.o | grep -v ' NT_' | grep -v '_GLOBAL_OFFSET_TABLE_'; then
-            echo "FAIL: the plugin depends on library functions the NT may not provide"
-            exit 1
-          fi
+          for f in plugins/comb_voice.o plugins/phase_six.o plugins/spectral_delay.o; do
+            echo "== $f: undefined symbols the NT must provide:"
+            arm-none-eabi-nm -u $f || true
+            if arm-none-eabi-nm -u $f | grep -v ' NT_' | grep -v '_GLOBAL_OFFSET_TABLE_'; then
+              echo "FAIL: $f depends on library functions the NT may not provide"
+              exit 1
+            fi
+            arm-none-eabi-size $f
+          done
           echo "OK: only NT API symbols are referenced"
-          arm-none-eabi-size plugins/comb_voice.o
 
       - name: Save the plugin
         uses: actions/upload-artifact@v4
         with:
-          name: comb_voice
-          path: plugins/comb_voice.o
+          name: plugins
+          path: plugins/*.o
