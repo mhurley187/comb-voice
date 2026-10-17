@@ -36,11 +36,11 @@ jobs:
           arm-none-eabi-g++ --version
 
       - name: Build
-        run: make CXX=arm-none-eabi-g++ ARM_CXX=arm-none-eabi-g++ API=distingNT_API/include plugins/comb_voice.o plugins/phase_six.o
+        run: make CXX=arm-none-eabi-g++ ARM_CXX=arm-none-eabi-g++ API=distingNT_API/include plugins/comb_voice.o plugins/phase_six.o plugins/spectral_delay.o
 
       - name: Check for unresolved symbols
         run: |
-          for f in plugins/comb_voice.o plugins/phase_six.o; do
+          for f in plugins/comb_voice.o plugins/phase_six.o plugins/spectral_delay.o; do
             echo "== $f: undefined symbols the NT must provide:"
             arm-none-eabi-nm -u $f || true
             if arm-none-eabi-nm -u $f | grep -v ' NT_' | grep -v '_GLOBAL_OFFSET_TABLE_'; then
