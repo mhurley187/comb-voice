@@ -337,7 +337,7 @@ struct Effect
 	Spectral spec;
 	float sr = 48000.f;
 	int wr = 0;
-	float timeS = 12000.f, groupS = 0.f, shapeTaps[kMaxTaps], level[kMaxTaps], tl[kMaxTaps], tr_[kMaxTaps];
+	float timeS = 12000.f, groupS = 0.f, groupS2 = 0.f, shapeTaps[kMaxTaps], level[kMaxTaps], tl[kMaxTaps], tr_[kMaxTaps];
 	float frac[kMaxTaps], logu[kMaxTaps];
 	float outNorm = 1.f, fbNorm = 1.f, mixS = 0.5f, fbS = 0.f, resFbS = 1.f, resOutS = 0.5f;
 	float lpL = 0.f, lpR = 0.f, dcxL = 0.f, dcyL = 0.f, dcxR = 0.f, dcyR = 0.f;
@@ -394,13 +394,14 @@ struct Effect
 		if (!primed)
 		{
 			timeS = clampf(P.timeMs * ( in.timeCV ? ntm::exp2(clampf(in.timeCV[0], -8.f, 8.f)) : 1.f ) * 0.001f * sr, 8.f, (float)( kDelayLen - 8 ));
-			groupS = clampf(P.group + ( in.groupCV ? in.groupCV[0] * 0.2f : 0.f ), -1.f, 1.f); 			mixS = P.mix; fbS = P.feedback; resFbS = P.resFb; resOutS = P.resOut; primed = true;
+			groupS = groupS2 = clampf(P.group + ( in.groupCV ? in.groupCV[0] * 0.2f : 0.f ), -1.f, 1.f); 			mixS = P.mix; fbS = P.feedback; resFbS = P.resFb; resOutS = P.resOut; primed = true;
 		}
 		spec.updateStatic(P);
 		updateTaps(P);
 		const int nt = lastTaps;
 		const float smT = 1.f - ntm::exp(-1.f / ( 0.05f * sr ));
 		const float smP = 1.f - ntm::exp(-1.f / ( 0.02f * sr ));
+		const float smG = 1.f - ntm::exp(-1.f / ( 0.04f * sr ));
 		const float lpA = 1.f - ntm::exp(-ntm::kTwoPi * clampf(P.dampHz, 50.f, 0.45f * sr) / sr);
 		const float maxSamples = (float)( kDelayLen - 8 );
 
@@ -415,15 +416,14 @@ struct Effect
 			float tTarget = clampf(timeMs * 0.001f * sr, 8.f, maxSamples);
 			timeS += ( tTarget - timeS ) * smT;
 			float gT = P.group + ( in.groupCV ? in.groupCV[i] * 0.2f : 0.f );
-			groupS += ( clampf(gT, -1.f, 1.f) - groupS ) * smT;
+			groupS += ( clampf(gT, -1.f, 1.f) - groupS ) * smG;       // two cascaded smoothers: continuous velocity, no Doppler clicks
+			groupS2 += ( groupS - groupS2 ) * smG;
 			mixS += ( P.mix - mixS ) * smP; fbS += ( P.feedback - fbS ) * smP;
 			resFbS += ( P.resFb - resFbS ) * smP; resOutS += ( P.resOut - resOutS ) * smP;
 
-			if ((blockCount++ & 15) == 0)
-			{
-				const float g = ntm::exp2(groupS * 2.f);     // exponent 0.25 .. 4
-				for (int t = 0; t < nt; ++t) frac[t] = ntm::exp2(g * logu[t]);
-			}
+			// tap positions are recomputed every sample: stepping them in blocks makes the moving read heads zipper
+			const float g = ntm::exp2(groupS2 * 2.f);     // exponent 0.25 .. 4
+			for (int t = 0; t < nt; ++t) frac[t] = ntm::exp2(g * logu[t]);
 
 			// ---- read taps
 			float tapL = 0.f, tapR = 0.f;
