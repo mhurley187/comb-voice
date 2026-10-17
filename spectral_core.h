@@ -145,7 +145,9 @@ struct Spectral
 	void setQuality(int q)
 	{
 		quality = q;
-		N = q == 0 ? 1024 : 2048; logN = q == 0 ? 10 : 11; hop = N / 4;
+		// both sizes update every 256 samples (187.5 Hz): the longer window gives finer frequency resolution
+		// without slowing the frame rate (a slower frame rate sounds like a ~94 Hz buzz)
+		N = q == 0 ? 1024 : 2048; logN = q == 0 ? 10 : 11; hop = 256;
 		sliceEvery = ( hop - 8 ) / ( logN + 2 ); if (sliceEvery < 1) sliceEvery = 1;
 		hopCount = 0; stage = -1; havePrev = false;
 	}
@@ -220,9 +222,9 @@ struct Spectral
 			{
 				float ph = ntm::atan2(im[k], re[k]);
 				float pp = ntm::atan2(B->pim[k], B->pre[k]);
-				float d = ph - pp - 0.5f * ntm::kPi * (float)k;      // expected advance per N/4 hop = pi*k/2
+				float d = ph - pp - ntm::kTwoPi * (float)k * (float)hop / (float)N;   // expected phase advance over one hop
 				d -= ntm::kTwoPi * ntm::floor(d * 0.15915494f + 0.5f);
-				delta = clampf(d * 0.63661977f, -0.75f, 0.75f);
+				delta = clampf(d * (float)N / ( ntm::kTwoPi * (float)hop ), -0.75f, 0.75f);   // deviation in bins
 			}
 			const float f = ( (float)k + delta ) * binHz;
 			float amp = ntm::sqrt(pm[p]) * 4.f / (float)N;
@@ -238,7 +240,8 @@ struct Spectral
 			if (best < 0)
 			{
 				for (int v = 0; v < K; ++v)
-					if (!claimed[v] && vta[v] <= 1e-6f && va[v] <= 1e-5f) { best = v; vf[v] = vtf[v] = f; va[v] = 0.f; vta[v] = 0.f; break; }
+					if (!claimed[v] && vta[v] <= 1e-6f && va[v] <= 1e-5f) { best = v; vf[v] = vtf[v] = f; va[v] = 0.f; vta[v] = 0.f;
+						break; }
 			}
 			if (best < 0) continue;
 			claimed[best] = true;
